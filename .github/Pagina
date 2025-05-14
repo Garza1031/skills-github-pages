@@ -1,0 +1,253 @@
+import zipfile
+import os
+
+# Definir la estructura de archivos del proyecto
+project_dir = "/mnt/data/babycare_jabones_project"
+
+# Crear el directorio principal
+os.makedirs(project_dir, exist_ok=True)
+
+# Archivos y carpetas que se necesitan en el proyecto
+files_and_folders = {
+    "babycare-jabones/": [
+        ("app/api/checkout/route.js", """
+import Stripe from "stripe";
+import { NextResponse } from "next/server";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+export async function POST(req) {
+  const { items } = await req.json();
+
+  const line_items = items.map((item) => ({
+    price_data: {
+      currency: "usd",
+      product_data: {
+        name: `Jabón de ${item.nombre}`,
+      },
+      unit_amount: Math.round(item.precio * 100),
+    },
+    quantity: 1,
+  }));
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    mode: "payment",
+    line_items,
+    success_url: "http://localhost:3000/success",
+    cancel_url: "http://localhost:3000/cancel",
+  });
+
+  return NextResponse.json({ id: session.id });
+}
+"""),
+
+        ("pages/success.jsx", """
+export default function SuccessPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-green-50">
+      <div className="bg-white p-10 rounded-2xl shadow-xl text-center">
+        <h1 className="text-3xl font-bold text-green-600 mb-4">¡Gracias por tu compra!</h1>
+        <p className="text-gray-700">Tu pedido ha sido procesado exitosamente.</p>
+      </div>
+    </div>
+  );
+}
+"""),
+
+        ("pages/cancel.jsx", """
+export default function CancelPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-red-50">
+      <div className="bg-white p-10 rounded-2xl shadow-xl text-center">
+        <h1 className="text-3xl font-bold text-red-600 mb-4">Pago cancelado</h1>
+        <p className="text-gray-700">Puedes intentarlo nuevamente cuando gustes.</p>
+      </div>
+    </div>
+  );
+}
+"""),
+
+        (".env.local", """
+STRIPE_SECRET_KEY=sk_test_TU_CLAVE_SECRETA
+"""),
+
+        ("package.json", """
+{
+  "name": "babycare-jabones",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "12.0.0",
+    "react": "17.0.0",
+    "react-dom": "17.0.0",
+    "stripe": "^8.0.0"
+  }
+}
+"""),
+
+        ("tailwind.config.js", """
+module.exports = {
+  content: [
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+"""),
+
+        ("postcss.config.js", """
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+"""),
+
+        ("next.config.js", """
+module.exports = {
+  reactStrictMode: true,
+}
+"""),
+
+        ("page.jsx", """
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { motion } from "framer-motion";
+import { ShoppingCart, Trash2 } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+
+const stripePromise = loadStripe("pk_test_REEMPLAZA_CON_TU_CLAVE_PUBLICA");
+
+const productosDisponibles = [
+  { nombre: "Caléndula", precio: 5.99 },
+  { nombre: "Avena & Miel", precio: 6.49 },
+  { nombre: "Manzanilla", precio: 5.49 },
+];
+
+export default function HomePage() {
+  const [carrito, setCarrito] = useState([]);
+
+  const agregarAlCarrito = (producto) => {
+    setCarrito((prev) => [...prev, producto]);
+  };
+
+  const eliminarDelCarrito = (index) => {
+    setCarrito((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const total = carrito.reduce((acc, p) => acc + p.precio, 0).toFixed(2);
+
+  const handleCheckout = async () => {
+    const stripe = await stripePromise;
+    const response = await fetch("/api/checkout", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ items: carrito }),
+    });
+    const session = await response.json();
+    await stripe.redirectToCheckout({ sessionId: session.id });
+  };
+
+  return (
+    <div className="min-h-screen bg-pink-50 text-gray-800">
+      {/* Header */}
+      <header className="bg-white shadow-md p-6 flex justify-between items-center">
+        <h1 className="text-3xl font-bold text-pink-600">BabyCare Jabones</h1>
+        <nav className="space-x-4">
+          <a href="#productos" className="text-gray-600 hover:text-pink-600">Productos</a>
+          <a href="#sobre-nosotros" className="text-gray-600 hover:text-pink-600">Sobre Nosotros</a>
+          <a href="#contacto" className="text-gray-600 hover:text-pink-600">Contacto</a>
+          <a href="#carrito" className="text-pink-600 flex items-center">
+            <ShoppingCart className="mr-1" />
+            ({carrito.length})
+          </a>
+        </nav>
+      </header>
+
+      {/* Hero Section */}
+      <section className="bg-pink-100 p-12 text-center">
+        <motion.h2 
+          className="text-4xl font-bold mb-4"
+          initial={{ opacity: 0, y: -20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ duration: 0.8 }}
+        >
+          Cuidado Natural para la Piel Delicada de tu Bebé
+        </motion.h2>
+        <p className="text-lg mb-6">
+          Nuestros jabones están formulados con ingredientes orgánicos, ideales para pieles sensibles.
+        </p>
+        <Button className="bg-pink-600 text-white px-6 py-2 rounded-full hover:bg-pink-700">
+          Ver Productos
+        </Button>
+      </section>
+
+      {/* Productos */}
+      <section id="productos" className="p-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+        {productosDisponibles.map((producto, index) => (
+          <Card key={index} className="bg-white shadow-md rounded-2xl p-4">
+            <CardContent>
+              <h3 className="text-xl font-semibold text-pink-600 mb-2">Jabón de {producto.nombre}</h3>
+              <p className="text-gray-600 text-sm mb-2">
+                Suave y natural, perfecto para la higiene diaria de tu bebé.
+              </p>
+              <p className="text-pink-600 font-bold mb-4">${producto.precio.toFixed(2)}</p>
+              <Button 
+                className="bg-pink-500 text-white hover:bg-pink-600" 
+                onClick={() => agregarAlCarrito(producto)}
+              >
+                Agregar al Carrito
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+
+      {/* Carrito */}
+      <section id="carrito" className="bg-white p-10">
+        <h2 className="text-3xl font-bold text-center text-pink-600 mb-6">Tu Carrito</h2>
+        {carrito.length === 0 ? (
+          <p className="text-center text-gray-600">Aún no has agregado productos al carrito.</p>
+        ) : (
+          <div className="max-w-xl mx-auto space-y-4">
+            {carrito.map((item, index) => (
+              <div key={index} className="flex justify-between items-center bg-pink-50 p-4 rounded-xl">
+                <span>{item.nombre}</span>
+                <span>${item.precio.toFixed(2)}</span>
+                <Button variant="ghost" onClick={() => eliminarDelCarrito(index)}>
+                  <Trash2 className="text-red-500" />
+                </Button>
+              </div>
+            ))}
+            <div className="text-right font-semibold text-pink-600">
+              Total: ${total}
+            </div>
+            <Button onClick={handleCheckout} className="bg-pink-600 text-white hover:bg-pink-700 w-full rounded-full">
+              Proceder al Pago
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {/* Sobre Nosotros */}
+      <section id="sobre-nosotros" className="bg-pink-100 p-10 text-center">
+        <h2 className="text-3xl font-bold text-pink-600 mb-4">Sobre Nosotros</h2>
+        <p className="text-gray-700 max-w-2xl mx-auto">
+          En BabyCare Jabones nos dedicamos a ofrecer productos de la más alta calidad, pensando en el bienestar de los más pequeños. Nuestro compromiso con ingredientes naturales y procesos artesanales garantiza una experiencia segura y confiable para toda la familia.
+        </p>
+      </
+
